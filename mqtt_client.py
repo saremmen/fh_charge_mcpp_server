@@ -13,8 +13,14 @@ class MQTTClient:
         self.client.on_message = self.on_message
         self.command_callback = None
         self.event_loop = event_loop
-        self.client.connect(self.config["broker"], self.config["port"])
-        self.client.loop_start()
+        try:
+            self.client.connect(self.config["broker"], self.config["port"])
+        except Exception as e:
+            logging.critical(f"Failed to connect to MQTT broker at {self.config['broker']}:{self.config['port']} - {e}")
+            import sys
+            sys.exit(1)
+        else:
+            self.client.loop_start()
 
     def set_command_callback(self, callback):
         self.command_callback = callback

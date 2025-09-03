@@ -2,19 +2,19 @@
   "ocpp": {
     "host": "0.0.0.0",
     "port": 9000,
-    "charge_point_id": "FH_CHARGE2"
+    "charge_point_id": "FH_CHARGE"
   },
   "mqtt": {
-    "broker": "192.168.50.223",
+    "broker": "192.168.50.218",
     "port": 1883,
     "username": "addons",
     "password": "Ea8oyeipi8yeicha1chaesogoh3gim4kohquaebaeTh6aexe7ahYooYahDeivi2W"
 
   },
   "logging": {
-    "level": "INFO",
+    "level": "WARNING",
     "file": "logs/ocpp_server.log",
-    "to_console_level": "INFO"
+    "to_console_level": "WARNING"
   },
   "ev":{
     "min_current": 6

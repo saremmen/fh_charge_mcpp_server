@@ -1,3 +1,9 @@
-websockets==11.0.3
-ocpp==1.6.1
-paho-mqtt==1.6.1
+
+# Core dependencies
+ocpp>=0.13.1
+websockets>=10.0
+paho-mqtt>=1.6.1
+
+# Optional/Recommended
+PyYAML>=6.0  # If you use YAML config (optional)
+requests>=2.31.0  # If you use HTTP for anything (optional)

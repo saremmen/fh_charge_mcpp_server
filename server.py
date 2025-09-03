@@ -11,7 +11,7 @@ import os
 import sys
 
 # Load settings
-with open("config.json") as f:
+with open("config//config.json") as f:
     config = json.load(f)
 
 # Ensure log directory exists
@@ -40,7 +40,8 @@ root_logger.addHandler(file_handler)
 root_logger.addHandler(console_handler)
 
 import asyncio
-main_loop = asyncio.get_event_loop()
+# main_loop will be set in main()
+main_loop = None
 charge_points = {}
 mqtt_client = MQTTClient(config["mqtt"], main_loop)
 
@@ -67,7 +68,7 @@ async def on_connect(websocket):
     def handle_command(topic, payload):
         logging.info(f"handle_command called with topic={topic}, payload={payload}")
         import json
-        with open("config.json") as f:
+        with open("config//config.json") as f:
             config = json.load(f)
         # Use the correct charge_point instance from the global dict
         cp_id = config["ocpp"]["charge_point_id"]
@@ -91,33 +92,82 @@ async def on_connect(websocket):
 
     mqtt_client.set_command_callback(handle_command)
 
+  
     try:
         logging.info(f"New connection from {websocket.remote_address}")
         await charge_point.start()
+    except websockets.exceptions.ConnectionClosedError as e:
+        logging.error(f"WebSocket connection closed unexpectedly: {e}")
     except Exception as e:
         logging.exception(f"Connection error: {e}")
     finally:
         logging.info(f"Connection closed for {websocket.remote_address}")
 
+async def reject_non_websocket(path, request_headers):
+    # request_headers is a websockets.http11.Request
+    headers = request_headers.headers
+
+    if "Upgrade" not in headers:
+        client_ip = headers.get("X-Forwarded-For") or headers.get("Host", "?")
+        logging.warning(
+            f"Rejected non-WebSocket request from {client_ip} on path {path}"
+        )
+        return (
+            400,
+            [("Content-Type", "text/plain; charset=utf-8")],
+            b"Bugger off.\n",
+        )
+
+    return None  # Continue normal websocket handshake
+
+
+
+
 async def main():
+    # Quiet down noisy handshake tracebacks from the websockets library
+    logging.getLogger("websockets.server").setLevel(logging.WARNING)
+    logging.getLogger("websockets.protocol").setLevel(logging.WARNING)
+
     start_server = websockets.serve(
         on_connect,
         config["ocpp"]["host"],
         config["ocpp"]["port"],
-        subprotocols=['ocpp1.6']
+        subprotocols=["ocpp1.6"],
+        process_request=reject_non_websocket,
     )
+
     server = await start_server
-    logging.info(f"OCPP server started on {config['ocpp']['host']}:{config['ocpp']['port']}")
+    logging.info(
+        f"OCPP server started on {config['ocpp']['host']}:{config['ocpp']['port']}"
+    )
+
     global main_loop
     main_loop = asyncio.get_running_loop()
+
     async def loop_alive():
         while True:
             logging.debug("Main event loop is alive.")
             await asyncio.sleep(10)
+
     asyncio.create_task(loop_alive())
+
     await server.wait_closed()  # Keep server running
 
-# Windows requires this policy for Python 3.8+
+
 if __name__ == "__main__":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main())
+    import sys
+    import asyncio
+
+    # Only set WindowsSelectorEventLoopPolicy if it exists (prevents crash in Linux Docker)
+    if sys.platform == "win32" and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        # Graceful shutdown on Ctrl+C
+        import logging
+        logging.info("Shutting down OCPP server...")
+    except Exception as e:
+        import logging
+        logging.exception(f"Unexpected error: {e}")

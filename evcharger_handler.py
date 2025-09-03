@@ -9,10 +9,25 @@ import uuid
 from ocpp.routing import on
 import traceback
 from datetime import datetime, timezone
+import asyncio
 
 
 
 class EVChargePoint(cp):
+
+
+    def __init__(self, id, websocket, mqtt_client, config):
+        super().__init__(id, websocket)
+        self.mqtt_client = mqtt_client
+        self.status = "init"  # Default initial status
+        self.idTag = "it's ok"
+        self.current_transaction_id = None
+        self.config = config
+        self.minimum_current_ev = config["ev"]["min_current"]
+        self.maximum_current_charger = 32  # Assuming a max current of 32A for the charger
+        self.maximum_current_now = 16  # Default selected max current, set by HA 
+        self.last_charging_start = None
+        
     def publish_last_charging_start_sensor(self):
         """
         Publish Home Assistant MQTT discovery and state for last_charging_start as a sensor.
@@ -37,19 +52,6 @@ class EVChargePoint(cp):
         # Publish initial state if available
         if self.last_charging_start:
             self.mqtt_client.publish(state_topic, self.last_charging_start)
-
-    def __init__(self, id, websocket, mqtt_client, config):
-        super().__init__(id, websocket)
-        self.mqtt_client = mqtt_client
-        self.status = "init"  # Default initial status
-        self.idTag = "it's ok"
-        self.current_transaction_id = None
-        self.config = config
-        self.minimum_current_ev = config["ev"]["min_current"]
-        self.maximum_current_charger = 32  # Assuming a max current of 32A for the charger
-        self.maximum_current_now = 16  # Default selected max current, set by HA 
-        self.last_charging_start = None
-
     def publish_control_discovery(self):
 
         """
@@ -301,30 +303,15 @@ class EVChargePoint(cp):
     async def set_current_limit(self, value):
         logging.info(f"{self.id}: Setting current limit to {value}A ")
         self.maximum_current_now = value
-
+        
         # Update the charging profile with the new current limit
         if self.status == "Charging":
             await self.set_charging_profile(self.maximum_current_now)
 
-        '''#testing for now
         
-        if value ==6:##run disconnect cable test
-            self.unlock_cable(test=True)
-
-        elif  value == 7:
-            await self.resume_charging()
-        elif value == 8:
-            #await self.RemoteStopTransaction(override_check=True)
-            await self.suspend_charging()
-        elif value == 9:
-            # ChangeAvailability
-            await self.change_availability("Inoperative")
-        elif value == 10:
-            # ChangeAvailability
-            await self.change_availability("Operative")
-        elif value == 11:
-            # ChangeAvailability
-            await self.set_charging_profile(self.maximum_current_now)'''
+        # Publish updated state to HA
+        device_id = self.id
+        self.mqtt_client.publish(f"ocpp/current_limit_{device_id}/state", value)        
 
 
     def zero_metrics(self):
@@ -366,6 +353,10 @@ class EVChargePoint(cp):
             }
         )
         logging.info(f"{self.id}: StartTransaction response: {response}")
+
+        #sleep 5 seconds and set charging profile
+        await asyncio.sleep(5)
+        await self.set_charging_profile(self.maximum_current_now)   
         return response
 
     @on("StopTransaction")
@@ -448,30 +439,7 @@ class EVChargePoint(cp):
             )
             logging.info(f"{self.id}: BootNotification response: {response}")
 
-            # Query SupportedFeatureProfiles
-            try:
-                
 
-                request = call.GetConfiguration(key=["SupportedFeatureProfiles"])
-                call_msg = Call(
-                    unique_id=str(uuid.uuid4()),
-                    action="GetConfiguration",
-                    payload={"key": ["SupportedFeatureProfiles"]}
-                )
-                feature_response = await self._send(call_msg.to_json())
-
-                logging.info(f"{self.id}: GetConfiguration response: {feature_response}")
-
-                if "configurationKey" in feature_response:
-                    self.supported_features = [
-                        item["value"] for item in feature_response["configurationKey"]
-                    ]
-                    logging.info(f"{self.id}: Supported features -> {self.supported_features}")
-                else:
-                    logging.warning(f"{self.id}: No SupportedFeatureProfiles returned")
-
-            except Exception as cfg_err:
-                logging.warning(f"{self.id}: Could not query SupportedFeatureProfiles: {cfg_err}")
 
             return response
 
@@ -517,6 +485,8 @@ class EVChargePoint(cp):
         #if metrics is received, charging is ongoing. Check if transactionID is None, in that case read from file
         if not self.current_transaction_id:
             self.load_persisted_transaction_id()
+        #set status to Charging
+        self.status = "Charging"
 
         try:
             # Home Assistant MQTT Discovery and value publishing
@@ -595,7 +565,7 @@ class EVChargePoint(cp):
     async def on_status_notification(self, connector_id, status, error_code, **kwargs):
         logging.info(f"{self.id}: StatusNotification received: connector={connector_id}, status={status}, error_code={error_code}, extra={kwargs}")
         try:
-            if status in ["SuspendedEV","SuspendedEVSE","Inoperative", "Finishing"]:
+            if status in ["SuspendedEV","SuspendedEVSE","Inoperative", "Finishing","Available"]:
                 self.zero_metrics()
 
             await self.send_status(status)
