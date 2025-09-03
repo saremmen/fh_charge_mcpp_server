@@ -1,6 +1,7 @@
 # FH_CHARGE-OCPP-server
 
 A Python-based OCPP 1.6 server for managing and monitoring Futurehome EV charger, with MQTT integration for Home Assistant.
+FUTUREHOMW CHARGE <--> OCCP SERVER <--> HA MQTT integration(ex MOSQUITTO) <--> (autodiscover) HA Object
 
 ## Features
 - OCPP 1.6 WebSocket server for EV charger communication
@@ -8,7 +9,7 @@ A Python-based OCPP 1.6 server for managing and monitoring Futurehome EV charger
 - Home Assistant MQTT Discovery support
 - Configurable logging to file and console
 - Modular handler for charger logic (`evcharger_handler.py`)
-- Graceful error handling and robust startup
+
 
 ## Requirements
 - Python 3.12+
@@ -16,35 +17,32 @@ A Python-based OCPP 1.6 server for managing and monitoring Futurehome EV charger
 
 
 ## Setup
-1. **Clone the repository:**
-   ```sh
-   git clone <your-repo-url>
-   cd FH_CHARGE-OCPP-server
-   ```
-2. **Create and activate a virtual environment:**
-   ```sh
-   python -m venv venv
-   venv\Scripts\activate  # On Windows
-   # or
-   source venv/bin/activate  # On Linux/Mac
-   ```
-3. **Install dependencies:**
-   ```sh
-   pip install -r requirements.txt
-   ```
-4. **Configure the server:**
-   - Edit `config/config.json` to match your environment (MQTT, OCPP, logging, etc).
+1. Clone repository into docker environment, create container and run 
 
-## Usage
-Start the server with:
-```sh
-python server.py
-```
 
-- The server will listen for OCPP 1.6 WebSocket connections from EV chargers.
-- MQTT topics will be published for Home Assistant discovery and control.
-- Logs are written to the file specified in `config/config.json`.
-
+#Config.json
+{
+  "ocpp": {
+    "host": "0.0.0.0",        // The IP address to bind the OCPP server (0.0.0.0 = all interfaces)
+    "port": 9000,             // The port for the OCPP WebSocket server
+    "charge_point_id": "FH_CHARGE" // Unique ID for the charge point -name appearing in HA
+  },
+  "mqtt": {
+    "broker": "192.168.200.200", // MQTT broker address
+    "port": 1883,               // MQTT broker port
+    "username": "mqttuser",       // MQTT username
+    "password": "********"      // MQTT password
+  },
+  "logging": {
+    "level": "WARNING",         // Log level for file logging (e.g., INFO, WARNING, ERROR)
+    "file": "logs/ocpp_server.log", // Log file path
+    "to_console_level": "WARNING"   // Log level for console output
+  },
+  "ev": {
+    "min_current": 6            // Minimum charging current ev (Amps)
+  },
+  "allow_writeback": true       // Allow control commands from MQTT (set to false for read-only)
+}
 ## File Structure
 - `server.py` — Main entry point, starts the OCPP server and MQTT client
 - `evcharger_handler.py` — Handles charger logic and OCPP message routing
@@ -56,7 +54,7 @@ python server.py
 
 ## Home Assistant Integration
 - The server publishes MQTT discovery topics for sensors and controls.
-- You can control charging, unlock cable, set current limit, and monitor status via Home Assistant.
+- You can control charging (suspend), unlock cable, set current limit (restarts charging with current!= 0), and monitor status via Home Assistant.
 
 ## Troubleshooting
 - Ensure your MQTT broker is running and reachable.
@@ -68,3 +66,6 @@ MIT License
 
 ---
 For more details, see the code and comments in each file.
+
+<img width="1079" height="1098" alt="image" src="https://github.com/user-attachments/assets/9a24159c-6444-474a-8e01-5724eb83bc70" />
+
