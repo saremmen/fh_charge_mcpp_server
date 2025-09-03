@@ -5,10 +5,10 @@
     "charge_point_id": "FH_CHARGE"
   },
   "mqtt": {
-    "broker": "192.168.50.218",
+    "broker": "192.168.200.200",
     "port": 1883,
-    "username": "addons",
-    "password": "Ea8oyeipi8yeicha1chaesogoh3gim4kohquaebaeTh6aexe7ahYooYahDeivi2W"
+    "username": "MQTT-USERNAME",
+    "password": "MQTT-PASSWORD"
 
   },
   "logging": {
